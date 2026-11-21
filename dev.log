@@ -79,3 +79,11 @@
  ✓ Compiled in 353ms (838 modules)
  GET /admin 200 in 83ms
  GET /admin 200 in 247ms
+ GET / 200 in 27ms
+ GET /admin 200 in 22ms
+ GET /publicar 200 in 27ms
+ ✓ Compiled in 456ms (838 modules)
+ GET /publicar 200 in 184ms
+ ✓ Compiled in 273ms (838 modules)
+ GET /publicar 200 in 81ms
+ GET /admin 200 in 43ms
