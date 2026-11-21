@@ -1,0 +1,81 @@
+
+> plataforma-mordisco@1.0.0 dev
+> next dev
+
+   ▲ Next.js 15.5.29
+   - Local:        http://localhost:3000
+   - Network:      http://172.16.88.8:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 11.1s
+ ○ Compiling / ...
+ ✓ Compiled / in 8.6s (788 modules)
+ GET / 200 in 9499ms
+ ✓ Compiled in 839ms (322 modules)
+ GET / 200 in 142ms
+ GET / 200 in 36ms
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 2.8s (803 modules)
+ GET /admin 200 in 2939ms
+ GET /admin 200 in 48ms
+ GET /admin 200 in 24ms
+ ✓ Compiled in 659ms (817 modules)
+ GET /admin 200 in 76ms
+ ✓ Compiled in 321ms (817 modules)
+ GET /admin 200 in 73ms
+ GET / 200 in 35ms
+ GET / 200 in 21ms
+ ○ Compiling /publicar ...
+ ✓ Compiled /publicar in 522ms (816 modules)
+ GET /publicar 200 in 650ms
+ GET /admin 200 in 44ms
+ ✓ Compiled in 554ms (830 modules)
+ GET /admin 200 in 123ms
+ ✓ Compiled in 440ms (830 modules)
+ GET /admin 200 in 82ms
+ ✓ Compiled in 379ms (830 modules)
+ GET /admin 200 in 136ms
+ ✓ Compiled in 1221ms (834 modules)
+ GET /admin 200 in 99ms
+ ✓ Compiled in 356ms (834 modules)
+ GET /admin 200 in 97ms
+ ✓ Compiled in 508ms (834 modules)
+ GET /admin 200 in 89ms
+ GET / 200 in 29ms
+ GET /publicar 200 in 29ms
+ GET / 200 in 17ms
+ GET /admin 200 in 18ms
+ GET /publicar 200 in 20ms
+ GET /publicar 200 in 24ms
+ GET / 200 in 18ms
+ GET /admin 200 in 71ms
+ GET /publicar 200 in 29ms
+ GET /admin 200 in 25ms
+ ✓ Compiled in 788ms (834 modules)
+ GET /admin 200 in 282ms
+ ✓ Compiled in 996ms (834 modules)
+ GET /admin 200 in 117ms
+ ✓ Compiled in 555ms (834 modules)
+ GET /admin 200 in 85ms
+ ✓ Compiled in 1202ms (836 modules)
+ GET /admin 200 in 63ms
+ ✓ Compiled in 365ms (836 modules)
+ GET /admin 200 in 72ms
+ ✓ Compiled in 465ms (836 modules)
+ GET /admin 200 in 72ms
+ ✓ Compiled in 649ms (836 modules)
+ GET /admin 200 in 172ms
+ ✓ Compiled in 678ms (836 modules)
+ GET /admin 200 in 195ms
+ ✓ Compiled in 417ms (836 modules)
+ GET /admin 200 in 86ms
+ ✓ Compiled in 438ms (836 modules)
+ GET /admin 200 in 73ms
+ ✓ Compiled in 907ms (838 modules)
+ GET /admin 200 in 91ms
+ ✓ Compiled in 363ms (838 modules)
+ GET /admin 200 in 80ms
+ ✓ Compiled in 353ms (838 modules)
+ GET /admin 200 in 83ms
+ GET /admin 200 in 247ms

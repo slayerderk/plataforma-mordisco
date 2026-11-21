@@ -16,6 +16,12 @@ import {
   Settings,
   Upload,
   Calendar,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  GripVertical,
+  Power,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatPrice, formatDate } from '@/lib/utils';
@@ -35,6 +41,10 @@ export default function AdminDashboardPage() {
   const [planes, setPlanes] = useState<any[]>([]);
   const [etiquetas, setEtiquetas] = useState<any[]>([]);
   const [nuevaEtiqueta, setNuevaEtiqueta] = useState('');
+  const [editingEtiquetaId, setEditingEtiquetaId] = useState<string | null>(null);
+  const [editingEtiquetaNombre, setEditingEtiquetaNombre] = useState('');
+  const [draggingEtiquetaId, setDraggingEtiquetaId] = useState<string | null>(null);
+  const [dragOverEtiquetaId, setDragOverEtiquetaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Modal Voucher View
@@ -58,7 +68,7 @@ export default function AdminDashboardPage() {
         .order('created_at', { ascending: false }),
       supabase.from('configuracion_admin').select('*').eq('id', 1).single(),
       supabase.from('planes').select('*').order('orden'),
-      supabase.from('etiquetas').select('*').order('nombre'),
+      supabase.from('etiquetas').select('*').order('orden').order('nombre'),
     ]);
 
     if (pagosRes.data) setPagos(pagosRes.data);
@@ -161,9 +171,132 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     if (!nuevaEtiqueta.trim()) return;
 
-    await supabase.from('etiquetas').insert({ nombre: nuevaEtiqueta.trim(), activo: true });
+    const nextOrden = etiquetas.length > 0
+      ? Math.max(...etiquetas.map((etq) => etq.orden ?? 0)) + 1
+      : 0;
+
+    const { error } = await supabase
+      .from('etiquetas')
+      .insert({ nombre: nuevaEtiqueta.trim(), activo: true, orden: nextOrden });
+
+    if (error) {
+      alert('Error al agregar etiqueta: ' + error.message);
+      return;
+    }
+
     setNuevaEtiqueta('');
     loadAdminData();
+  };
+
+  // Editar Etiqueta
+  const handleUpdateEtiqueta = async (id: string) => {
+    const nombre = editingEtiquetaNombre.trim();
+    if (!nombre) return;
+
+    const { error } = await supabase.from('etiquetas').update({ nombre }).eq('id', id);
+
+    if (error) {
+      alert('Error al actualizar etiqueta: ' + error.message);
+      return;
+    }
+
+    setEtiquetas((prev) => prev.map((etq) => (etq.id === id ? { ...etq, nombre } : etq)));
+    setEditingEtiquetaId(null);
+    setEditingEtiquetaNombre('');
+  };
+
+  // Activar / Desactivar Etiqueta
+  const handleToggleEtiqueta = async (etq: any) => {
+    const activo = !etq.activo;
+
+    const { error } = await supabase.from('etiquetas').update({ activo }).eq('id', etq.id);
+
+    if (error) {
+      alert('Error al actualizar etiqueta: ' + error.message);
+      return;
+    }
+
+    setEtiquetas((prev) => prev.map((e) => (e.id === etq.id ? { ...e, activo } : e)));
+  };
+
+  // Reordenar Etiquetas (Arrastrar y soltar)
+  const handleDragStartEtiqueta = (e: React.DragEvent<HTMLDivElement>, etq: any) => {
+    setDraggingEtiquetaId(etq.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', etq.id);
+  };
+
+  const handleDragOverEtiqueta = (e: React.DragEvent<HTMLDivElement>, etq: any) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverEtiquetaId !== etq.id) setDragOverEtiquetaId(etq.id);
+  };
+
+  const handleDropEtiqueta = async (e: React.DragEvent<HTMLDivElement>, target: any) => {
+    e.preventDefault();
+    const sourceId = draggingEtiquetaId || e.dataTransfer.getData('text/plain');
+    setDraggingEtiquetaId(null);
+    setDragOverEtiquetaId(null);
+
+    if (!sourceId || sourceId === target.id) return;
+
+    const from = etiquetas.findIndex((etq) => etq.id === sourceId);
+    const to = etiquetas.findIndex((etq) => etq.id === target.id);
+    if (from === -1 || to === -1) return;
+
+    const reordered = [...etiquetas];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+
+    const withOrder = reordered.map((etq, index) => ({ ...etq, orden: index }));
+    setEtiquetas(withOrder);
+
+    const results = await Promise.all(
+      withOrder.map((etq) =>
+        supabase.from('etiquetas').update({ orden: etq.orden }).eq('id', etq.id)
+      )
+    );
+
+    const failed = results.find((result) => result.error);
+    if (failed?.error) {
+      alert('Error al guardar el orden de las etiquetas: ' + failed.error.message);
+      loadAdminData();
+    }
+  };
+
+  const handleDragEndEtiqueta = () => {
+    setDraggingEtiquetaId(null);
+    setDragOverEtiquetaId(null);
+  };
+
+  // Eliminar Etiqueta
+  const handleDeleteEtiqueta = async (etq: any) => {
+    if (!confirm(`¿Eliminar la etiqueta "${etq.nombre}"? También se quitará de los anuncios que la usan.`)) {
+      return;
+    }
+
+    const { error: linkError } = await supabase
+      .from('anuncio_etiquetas')
+      .delete()
+      .eq('etiqueta_id', etq.id);
+
+    if (linkError) {
+      alert('No se pudo quitar la etiqueta de los anuncios: ' + linkError.message);
+      return;
+    }
+
+    const { error } = await supabase.from('etiquetas').delete().eq('id', etq.id);
+
+    if (error) {
+      alert('Error al eliminar etiqueta: ' + error.message);
+      return;
+    }
+
+    setEtiquetas((prev) => prev.filter((e) => e.id !== etq.id));
+    if (editingEtiquetaId === etq.id) {
+      setEditingEtiquetaId(null);
+      setEditingEtiquetaNombre('');
+    }
   };
 
   // Actualizar Plan
@@ -233,11 +366,10 @@ export default function AdminDashboardPage() {
       <div className="flex gap-2 my-6 overflow-x-auto pb-1 text-xs font-bold border-b border-white/5">
         <button
           onClick={() => setActiveTab('pagos')}
-          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${
-            activeTab === 'pagos'
-              ? 'bg-brand-600 text-white shadow-md'
-              : 'text-zinc-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${activeTab === 'pagos'
+            ? 'bg-brand-600 text-white shadow-md'
+            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
         >
           <DollarSign className="w-4 h-4" />
           <span>Validación de Pagos ({pagos.filter((p) => p.estado === 'pendiente').length})</span>
@@ -245,23 +377,21 @@ export default function AdminDashboardPage() {
 
         <button
           onClick={() => setActiveTab('config')}
-          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${
-            activeTab === 'config'
-              ? 'bg-brand-600 text-white shadow-md'
-              : 'text-zinc-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${activeTab === 'config'
+            ? 'bg-brand-600 text-white shadow-md'
+            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
         >
           <QrCode className="w-4 h-4" />
-          <span>Control Yape / Plin / QR</span>
+          <span>Control Pagos</span>
         </button>
 
         <button
           onClick={() => setActiveTab('planes')}
-          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${
-            activeTab === 'planes'
-              ? 'bg-brand-600 text-white shadow-md'
-              : 'text-zinc-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${activeTab === 'planes'
+            ? 'bg-brand-600 text-white shadow-md'
+            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
         >
           <Layers className="w-4 h-4" />
           <span>Planes & Tarifas</span>
@@ -269,11 +399,10 @@ export default function AdminDashboardPage() {
 
         <button
           onClick={() => setActiveTab('etiquetas')}
-          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${
-            activeTab === 'etiquetas'
-              ? 'bg-brand-600 text-white shadow-md'
-              : 'text-zinc-400 hover:text-white hover:bg-white/5'
-          }`}
+          className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all ${activeTab === 'etiquetas'
+            ? 'bg-brand-600 text-white shadow-md'
+            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
         >
           <Tag className="w-4 h-4" />
           <span>Etiquetas (Chips)</span>
@@ -297,13 +426,12 @@ export default function AdminDashboardPage() {
               {pagos.map((p) => (
                 <div
                   key={p.id}
-                  className={`glass-panel p-4 rounded-xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all ${
-                    p.estado === 'pendiente'
-                      ? 'border-amber-500/40 bg-amber-500/5'
-                      : p.estado === 'aprobado'
+                  className={`glass-panel p-4 rounded-xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all ${p.estado === 'pendiente'
+                    ? 'border-amber-500/40 bg-amber-500/5'
+                    : p.estado === 'aprobado'
                       ? 'border-emerald-500/30'
                       : 'border-white/5 opacity-60'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start gap-4">
                     {/* Voucher Thumbnail */}
@@ -318,22 +446,20 @@ export default function AdminDashboardPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold text-white">{p.anuncio?.titulo || 'Anuncio'}</span>
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                            p.metodo === 'yape'
-                              ? 'bg-[#742384]/40 text-[#e79eff] border border-[#742384]'
-                              : 'bg-[#00a9e0]/30 text-[#6fe0ff] border border-[#00a9e0]'
-                          }`}
+                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${p.metodo === 'yape'
+                            ? 'bg-[#742384]/40 text-[#e79eff] border border-[#742384]'
+                            : 'bg-[#00a9e0]/30 text-[#6fe0ff] border border-[#00a9e0]'
+                            }`}
                         >
                           {p.metodo}
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            p.estado === 'pendiente'
-                              ? 'bg-amber-500/20 text-amber-400'
-                              : p.estado === 'aprobado'
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pendiente'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : p.estado === 'aprobado'
                               ? 'bg-emerald-500/20 text-emerald-400'
                               : 'bg-rose-500/20 text-rose-400'
-                          }`}
+                            }`}
                         >
                           {p.estado}
                         </span>
@@ -535,11 +661,10 @@ export default function AdminDashboardPage() {
                 </div>
                 <button
                   onClick={() => toggleMetodo('yape_activo')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    config.yape_activo
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${config.yape_activo
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                    }`}
                 >
                   {config.yape_activo ? 'ON (Activo)' : 'OFF (Mantenimiento)'}
                 </button>
@@ -577,11 +702,10 @@ export default function AdminDashboardPage() {
                 </div>
                 <button
                   onClick={() => toggleMetodo('plin_activo')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    config.plin_activo
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${config.plin_activo
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                    }`}
                 >
                   {config.plin_activo ? 'ON (Activo)' : 'OFF (Mantenimiento)'}
                 </button>
@@ -663,7 +787,12 @@ export default function AdminDashboardPage() {
       {/* TAB 4: GESTIÓN DE ETIQUETAS (CHIPS) */}
       {activeTab === 'etiquetas' && (
         <div className="glass-panel p-6 rounded-2xl border border-white/10 flex flex-col gap-4 max-w-xl">
-          <h2 className="text-base font-bold text-white">Etiquetas Predefinidas para Anunciantes</h2>
+          <div>
+            <h2 className="text-base font-bold text-white">Etiquetas Predefinidas para Anunciantes</h2>
+            <p className="text-[11px] text-zinc-500 mt-1">
+              Arrastra las etiquetas con el mouse para definir el orden en que aparecen.
+            </p>
+          </div>
           <form onSubmit={handleCrearEtiqueta} className="flex gap-2">
             <input
               type="text"
@@ -678,13 +807,101 @@ export default function AdminDashboardPage() {
           </form>
 
           <div className="flex flex-wrap gap-2 pt-2">
+            {etiquetas.length === 0 && (
+              <span className="text-xs text-zinc-500">No hay etiquetas creadas todavía.</span>
+            )}
+
             {etiquetas.map((etq) => (
-              <span
+              <div
                 key={etq.id}
-                className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-200 font-medium flex items-center gap-2"
+                draggable={editingEtiquetaId !== etq.id}
+                onDragStart={(e) => handleDragStartEtiqueta(e, etq)}
+                onDragOver={(e) => handleDragOverEtiqueta(e, etq)}
+                onDrop={(e) => handleDropEtiqueta(e, etq)}
+                onDragEnd={handleDragEndEtiqueta}
+                className={`px-3 py-1.5 rounded-xl bg-white/5 border text-xs text-zinc-200 font-medium flex items-center gap-2 transition-all ${etq.activo ? '' : 'opacity-50'
+                  } ${draggingEtiquetaId === etq.id
+                    ? 'opacity-40 border-dashed border-white/20'
+                    : dragOverEtiquetaId === etq.id
+                      ? 'border-brand-500 bg-brand-500/10'
+                      : 'border-white/10'
+                  }`}
               >
-                <span>{etq.nombre}</span>
-              </span>
+                {editingEtiquetaId === etq.id ? (
+                  <>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingEtiquetaNombre}
+                      onChange={(e) => setEditingEtiquetaNombre(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleUpdateEtiqueta(etq.id);
+                        if (e.key === 'Escape') {
+                          setEditingEtiquetaId(null);
+                          setEditingEtiquetaNombre('');
+                        }
+                      }}
+                      className="w-40 bg-dark-900 border border-brand-500/50 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateEtiqueta(etq.id)}
+                      className="text-emerald-400 hover:text-emerald-300"
+                      title="Guardar cambios"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingEtiquetaId(null);
+                        setEditingEtiquetaNombre('');
+                      }}
+                      className="text-zinc-400 hover:text-white"
+                      title="Cancelar"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <GripVertical className="w-3.5 h-3.5 text-zinc-500 cursor-grab active:cursor-grabbing" />
+
+                    <span>{etq.nombre}</span>
+                    {!etq.activo && <span className="text-[9px] text-zinc-500">(inactiva)</span>}
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleEtiqueta(etq)}
+                      className={etq.activo ? 'text-emerald-400 hover:text-emerald-300' : 'text-zinc-500 hover:text-emerald-400'}
+                      title={etq.activo ? 'Desactivar' : 'Activar'}
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingEtiquetaId(etq.id);
+                        setEditingEtiquetaNombre(etq.nombre);
+                      }}
+                      className="text-zinc-400 hover:text-amber-400"
+                      title="Editar nombre"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEtiqueta(etq)}
+                      className="text-zinc-400 hover:text-rose-400"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
             ))}
           </div>
         </div>

@@ -44,7 +44,7 @@ export default function PublicarPage() {
     async function loadInitial() {
       const [depsRes, tagsRes, planesRes] = await Promise.all([
         supabase.from('departamentos').select('id, name').order('name'),
-        supabase.from('etiquetas').select('id, nombre').eq('activo', true),
+        supabase.from('etiquetas').select('id, nombre').eq('activo', true).order('orden'),
         supabase.from('planes').select('*').eq('activo', true).order('orden'),
       ]);
 
@@ -323,26 +323,24 @@ export default function PublicarPage() {
                 <button
                   type="button"
                   onClick={() => setModalidad('presencial')}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
-                    modalidad === 'presencial'
-                      ? 'bg-brand-600 border-brand-500 text-white'
-                      : 'bg-dark-900 border-white/10 text-zinc-400'
-                  }`}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${modalidad === 'presencial'
+                    ? 'bg-brand-600 border-brand-500 text-white'
+                    : 'bg-dark-900 border-white/10 text-zinc-400'
+                    }`}
                 >
                   <MapPin className="w-3.5 h-3.5" />
-                  Presencial / Físico
+                  Presencial
                 </button>
                 <button
                   type="button"
                   onClick={() => setModalidad('virtual')}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
-                    modalidad === 'virtual'
-                      ? 'bg-brand-600 border-brand-500 text-white'
-                      : 'bg-dark-900 border-white/10 text-zinc-400'
-                  }`}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${modalidad === 'virtual'
+                    ? 'bg-brand-600 border-brand-500 text-white'
+                    : 'bg-dark-900 border-white/10 text-zinc-400'
+                    }`}
                 >
                   <Globe className="w-3.5 h-3.5" />
-                  100% Virtual / Remoto
+                  100% Virtual
                 </button>
               </div>
             </div>
@@ -435,11 +433,10 @@ export default function PublicarPage() {
                           setSelectedTags([...selectedTags, tag.nombre]);
                         }
                       }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                        isSel
-                          ? 'bg-brand-600 border-brand-500 text-white shadow-sm'
-                          : 'bg-dark-900 border-white/10 text-zinc-400 hover:text-white'
-                      }`}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${isSel
+                        ? 'bg-brand-600 border-brand-500 text-white shadow-sm'
+                        : 'bg-dark-900 border-white/10 text-zinc-400 hover:text-white'
+                        }`}
                     >
                       {tag.nombre}
                     </button>
@@ -455,14 +452,12 @@ export default function PublicarPage() {
             <button
               type="button"
               onClick={() => setPermitirComentarios(!permitirComentarios)}
-              className={`w-11 h-6 rounded-full transition-colors relative ${
-                permitirComentarios ? 'bg-brand-600' : 'bg-dark-800'
-              }`}
+              className={`w-11 h-6 rounded-full transition-colors relative ${permitirComentarios ? 'bg-brand-600' : 'bg-dark-800'
+                }`}
             >
               <span
-                className={`block w-4 h-4 rounded-full bg-white transition-transform ${
-                  permitirComentarios ? 'translate-x-6' : 'translate-x-1'
-                }`}
+                className={`block w-4 h-4 rounded-full bg-white transition-transform ${permitirComentarios ? 'translate-x-6' : 'translate-x-1'
+                  }`}
               />
             </button>
           </div>
@@ -528,11 +523,10 @@ export default function PublicarPage() {
                 <div
                   key={plan.id}
                   onClick={() => setSelectedPlanId(plan.id)}
-                  className={`cursor-pointer rounded-xl p-4 border transition-all ${
-                    isSelected
-                      ? 'border-brand-500 bg-brand-500/10 shadow-lg shadow-brand-500/20'
-                      : 'border-white/10 bg-dark-900/60 hover:border-white/20'
-                  }`}
+                  className={`cursor-pointer rounded-xl p-4 border transition-all ${isSelected
+                    ? 'border-brand-500 bg-brand-500/10 shadow-lg shadow-brand-500/20'
+                    : 'border-white/10 bg-dark-900/60 hover:border-white/20'
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-white">{plan.nombre}</span>

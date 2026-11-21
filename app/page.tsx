@@ -34,7 +34,7 @@ export default function HomePage() {
 
       const [depsRes, etqsRes, planesRes, adsRes] = await Promise.all([
         supabase.from('departamentos').select('id, name').order('name'),
-        supabase.from('etiquetas').select('id, nombre').eq('activo', true),
+        supabase.from('etiquetas').select('id, nombre').eq('activo', true).order('orden'),
         supabase.from('planes').select('*').eq('activo', true).order('orden'),
         supabase
           .from('anuncios')

@@ -270,18 +270,21 @@ export type Database = {
           icono: string | null
           id: string
           nombre: string
+          orden: number
         }
         Insert: {
           activo?: boolean | null
           icono?: string | null
           id?: string
           nombre: string
+          orden?: number
         }
         Update: {
           activo?: boolean | null
           icono?: string | null
           id?: string
           nombre?: string
+          orden?: number
         }
         Relationships: []
       }
