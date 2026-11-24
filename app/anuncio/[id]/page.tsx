@@ -16,9 +16,10 @@ import {
   Eye,
   CheckCircle2,
   Clock,
-  Share2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { ensureAnonymousSession } from '@/lib/supabase/anonymous';
+import { normalizarTelefonoPeru } from '@/lib/whatsapp';
 import PhotoLightbox from '@/components/PhotoLightbox';
 
 export default function AnuncioDetailPage() {
@@ -30,10 +31,15 @@ export default function AnuncioDetailPage() {
   const [loading, setLoading] = useState(true);
   const [likes, setLikes] = useState(0);
   const [hasLiked, setHasLiked] = useState(false);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
-  const [comments, setComments] = useState<string[]>([]);
+  const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     async function fetchAd() {
@@ -44,7 +50,8 @@ export default function AnuncioDetailPage() {
         .select(`
           *,
           distrito:distritos(name, provincia:provincias(name, departamento:departamentos(name))),
-          usuario:perfiles(nombre_comercial, telefono, telefono_verificado, created_at)
+          usuario:perfiles(nombre_comercial, telefono, telefono_verificado, created_at),
+          anuncio_etiquetas(etiquetas(nombre))
         `)
         .eq('id', id)
         .single();
@@ -53,12 +60,47 @@ export default function AnuncioDetailPage() {
         setAnuncio(data);
         setLikes(data.total_likes || 0);
 
-        // Incrementar vistas
+        // Registrar visita y actualizar contador
         supabase
-          .from('anuncios')
-          .update({ total_vistas: (data.total_vistas || 0) + 1 })
-          .eq('id', id)
+          .rpc('registrar_visita_anuncio', { p_anuncio_id: id })
           .then();
+
+        // Cargar interacciones del usuario autenticado (sesión anónima incluida)
+        const user = await ensureAnonymousSession(supabase).catch(() => null);
+        if (user) {
+          const [likeRes, favoriteRes, commentsRes] = await Promise.all([
+            supabase
+              .from('anuncio_likes')
+              .select('id')
+              .eq('anuncio_id', id)
+              .eq('usuario_id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('favoritos')
+              .select('id')
+              .eq('anuncio_id', id)
+              .eq('usuario_id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('comentarios')
+              .select('id, contenido, created_at, usuario:perfiles(nombre_comercial)')
+              .eq('anuncio_id', id)
+              .eq('activo', true)
+              .order('created_at', { ascending: true }),
+          ]);
+
+          setHasLiked(Boolean(likeRes.data));
+          setIsFavorite(Boolean(favoriteRes.data));
+          if (commentsRes.data) setComments(commentsRes.data);
+        } else {
+          const { data: publicComments } = await supabase
+            .from('comentarios')
+            .select('id, contenido, created_at, usuario:perfiles(nombre_comercial)')
+            .eq('anuncio_id', id)
+            .eq('activo', true)
+            .order('created_at', { ascending: true });
+          if (publicComments) setComments(publicComments);
+        }
       }
       setLoading(false);
     }
@@ -67,14 +109,83 @@ export default function AnuncioDetailPage() {
   }, [id]);
 
   const handleLike = async () => {
-    if (hasLiked || !anuncio) return;
-    setHasLiked(true);
-    setLikes((prev) => prev + 1);
+    if (!anuncio || likeLoading) return;
+    setLikeLoading(true);
 
-    await supabase
-      .from('anuncios')
-      .update({ total_likes: likes + 1 })
-      .eq('id', id);
+    try {
+      const user = await ensureAnonymousSession(supabase);
+      const { data, error } = await supabase.rpc('toggle_anuncio_like', {
+        p_anuncio_id: id,
+      });
+
+      if (error || !data?.ok) {
+        throw new Error(data?.error || error?.message || 'No se pudo registrar el like.');
+      }
+
+      setHasLiked(Boolean(data.liked));
+      const { data: updated } = await supabase
+        .from('anuncios')
+        .select('total_likes')
+        .eq('id', id)
+        .single();
+      if (updated) setLikes(updated.total_likes || 0);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'No se pudo registrar el like.');
+    } finally {
+      setLikeLoading(false);
+    }
+  };
+
+  const handleFavorite = async () => {
+    if (!anuncio || favoriteLoading) return;
+    setFavoriteLoading(true);
+
+    try {
+      await ensureAnonymousSession(supabase);
+      const { data, error } = await supabase.rpc('toggle_favorito', {
+        p_anuncio_id: id,
+      });
+
+      if (error || !data?.ok) {
+        throw new Error(data?.error || error?.message || 'No se pudo guardar el favorito.');
+      }
+
+      setIsFavorite(Boolean(data.favorito));
+    } catch (err: any) {
+      setErrorMsg(err.message || 'No se pudo guardar el favorito.');
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
+  const handleComment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newComment.trim() || commentSubmitting) return;
+
+    setCommentSubmitting(true);
+    try {
+      const user = await ensureAnonymousSession(supabase);
+      const { data, error } = await supabase
+        .from('comentarios')
+        .insert({
+          anuncio_id: id,
+          usuario_id: user.id,
+          contenido: newComment.trim(),
+        })
+        .select('id, contenido, created_at, usuario:perfiles(nombre_comercial)')
+        .single();
+
+      if (error || !data) {
+        throw new Error(error?.message || 'No se pudo publicar el comentario.');
+      }
+
+      setComments((prev) => [...prev, data]);
+      setNewComment('');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'No se pudo publicar el comentario.');
+    } finally {
+      setCommentSubmitting(false);
+    }
   };
 
   const trackClick = async (tipo: 'whatsapp' | 'telegram') => {
@@ -116,11 +227,11 @@ export default function AnuncioDetailPage() {
   }
 
   const telefonoContacto = anuncio.usuario?.telefono || '999999999';
-  const cleanPhone = telefonoContacto.replace(/\D/g, '');
+  const waPhone = normalizarTelefonoPeru(telefonoContacto);
   const mensajePredeterminado = encodeURIComponent(
     `¡Hola ${anuncio.usuario?.nombre_comercial || ''}! Vi tu anuncio en Mordisco: "${anuncio.titulo}" y quisiera consultar por tus servicios.`
   );
-  const waUrl = `https://wa.me/51${cleanPhone}?text=${mensajePredeterminado}`;
+  const waUrl = `https://wa.me/${waPhone}?text=${mensajePredeterminado}`;
   const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}&text=${mensajePredeterminado}`;
 
   const fotos = anuncio.fotos && anuncio.fotos.length > 0 ? anuncio.fotos : ['/placeholder.jpg'];
@@ -128,6 +239,9 @@ export default function AnuncioDetailPage() {
     1,
     Math.floor((Date.now() - new Date(anuncio.usuario?.created_at || anuncio.created_at).getTime()) / (1000 * 60 * 60 * 24))
   );
+  const etiquetasAnuncio: string[] = (anuncio.anuncio_etiquetas || [])
+    .map((rel: any) => rel.etiquetas?.nombre)
+    .filter((nombre: any): nombre is string => Boolean(nombre));
 
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6">
@@ -209,6 +323,14 @@ export default function AnuncioDetailPage() {
                   {anuncio.edad} años
                 </span>
               )}
+              {etiquetasAnuncio.map((etiqueta, idx) => (
+                <span
+                  key={`${etiqueta}-${idx}`}
+                  className="px-2.5 py-1 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-300 text-xs font-semibold"
+                >
+                  {etiqueta}
+                </span>
+              ))}
             </div>
 
             <h1 className="text-2xl md:text-3xl font-extrabold text-white leading-tight mb-2">
@@ -236,14 +358,18 @@ export default function AnuncioDetailPage() {
 
           {/* Trust Box (Caja de Confianza OTP y Antigüedad) */}
           <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-950/40 via-dark-900 to-dark-900 border border-emerald-500/30 shadow-lg shadow-emerald-950/20 flex flex-col gap-2.5">
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
-              <span>PERFIL Y CONTACTO VERIFICADO</span>
+            <div className={`flex items-center gap-2 font-bold text-sm ${anuncio.usuario?.telefono_verificado ? 'text-emerald-400' : 'text-zinc-300'}`}>
+              <ShieldCheck className={`w-5 h-5 ${anuncio.usuario?.telefono_verificado ? 'text-emerald-400' : 'text-zinc-400'}`} />
+              <span>{anuncio.usuario?.telefono_verificado ? 'PERFIL Y CONTACTO VERIFICADO' : 'PERFIL DEL OFERTANTE'}</span>
             </div>
             <ul className="space-y-1.5 text-xs text-zinc-300">
               <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>WhatsApp validado con código OTP de 6 dígitos</span>
+                <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${anuncio.usuario?.telefono_verificado ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                <span>
+                  {anuncio.usuario?.telefono_verificado
+                    ? 'WhatsApp validado con código OTP de 6 dígitos'
+                    : 'Contacto pendiente de verificación por WhatsApp'}
+                </span>
               </li>
               <li className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -283,7 +409,7 @@ export default function AnuncioDetailPage() {
 
               <button
                 onClick={handleLike}
-                disabled={hasLiked}
+                disabled={likeLoading}
                 className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all text-xs font-semibold ${
                   hasLiked
                     ? 'bg-rose-500/20 border-rose-500 text-rose-400'
@@ -291,7 +417,20 @@ export default function AnuncioDetailPage() {
                 }`}
               >
                 <Heart className={`w-4 h-4 ${hasLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
-                <span>{hasLiked ? '¡Te gustó!' : 'Dar Me Gusta'}</span>
+                <span>{likeLoading ? 'Guardando...' : hasLiked ? 'Te gustó' : 'Dar Me Gusta'}</span>
+              </button>
+
+              <button
+                onClick={handleFavorite}
+                disabled={favoriteLoading}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all text-xs font-semibold ${
+                  isFavorite
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                    : 'bg-white/5 border-white/10 text-zinc-300 hover:border-amber-500 hover:text-amber-400'
+                }`}
+              >
+                <Heart className={`w-4 h-4 ${isFavorite ? 'fill-amber-500 text-amber-500' : ''}`} />
+                <span>{favoriteLoading ? 'Guardando...' : isFavorite ? 'Guardado' : 'Guardar'}</span>
               </button>
             </div>
           </div>
@@ -302,7 +441,7 @@ export default function AnuncioDetailPage() {
               <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-3">
                 Comentarios & Reseñas ({comments.length})
               </h3>
-              <div className="flex gap-2 mb-3">
+              <form onSubmit={handleComment} className="flex gap-2 mb-3">
                 <input
                   type="text"
                   placeholder="Escribe un comentario respetuoso..."
@@ -311,24 +450,27 @@ export default function AnuncioDetailPage() {
                   className="flex-1 bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-brand-500"
                 />
                 <button
-                  onClick={() => {
-                    if (newComment.trim()) {
-                      setComments([...comments, newComment.trim()]);
-                      setNewComment('');
-                    }
-                  }}
-                  className="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-semibold"
+                  type="submit"
+                  disabled={commentSubmitting || !newComment.trim()}
+                  className="px-3 py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold"
                 >
-                  Enviar
+                  {commentSubmitting ? 'Enviando...' : 'Enviar'}
                 </button>
-              </div>
+              </form>
+              {errorMsg && (
+                <p className="mb-3 text-xs text-rose-400">{errorMsg}</p>
+              )}
               {comments.length === 0 ? (
                 <p className="text-xs text-zinc-500 italic">Aún no hay comentarios. Sé el primero.</p>
               ) : (
                 <div className="space-y-2">
-                  {comments.map((c, i) => (
-                    <div key={i} className="p-2.5 rounded-lg bg-white/5 text-xs text-zinc-300">
-                      {c}
+                  {comments.map((comment) => (
+                    <div key={comment.id} className="p-2.5 rounded-lg bg-white/5 text-xs text-zinc-300">
+                      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] text-zinc-500">
+                        <span>{comment.usuario?.nombre_comercial || 'Usuario'}</span>
+                        <span>{new Date(comment.created_at).toLocaleString('es-PE')}</span>
+                      </div>
+                      <p className="whitespace-pre-line">{comment.contenido}</p>
                     </div>
                   ))}
                 </div>

@@ -373,6 +373,107 @@ export type Database = {
           },
         ]
       }
+      anuncio_likes: {
+        Row: {
+          anuncio_id: string
+          created_at: string | null
+          id: string
+          usuario_id: string
+        }
+        Insert: {
+          anuncio_id: string
+          created_at?: string | null
+          id?: string
+          usuario_id: string
+        }
+        Update: {
+          anuncio_id?: string
+          created_at?: string | null
+          id?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      comentarios: {
+        Row: {
+          activo: boolean | null
+          anuncio_id: string
+          contenido: string
+          created_at: string | null
+          id: string
+          usuario_id: string
+        }
+        Insert: {
+          activo?: boolean | null
+          anuncio_id: string
+          contenido: string
+          created_at?: string | null
+          id?: string
+          usuario_id: string
+        }
+        Update: {
+          activo?: boolean | null
+          anuncio_id?: string
+          contenido?: string
+          created_at?: string | null
+          id?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      favoritos: {
+        Row: {
+          anuncio_id: string
+          created_at: string | null
+          id: string
+          usuario_id: string
+        }
+        Insert: {
+          anuncio_id: string
+          created_at?: string | null
+          id?: string
+          usuario_id: string
+        }
+        Update: {
+          anuncio_id?: string
+          created_at?: string | null
+          id?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      anuncio_visitas: {
+        Row: {
+          anuncio_id: string
+          created_at: string | null
+          id: string
+          perfil_id: string
+          visitante_id: string | null
+        }
+        Insert: {
+          anuncio_id: string
+          created_at?: string | null
+          id?: string
+          perfil_id: string
+          visitante_id?: string | null
+        }
+        Update: {
+          anuncio_id?: string
+          created_at?: string | null
+          id?: string
+          perfil_id?: string
+          visitante_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'anuncio_visitas_anuncio_id_fkey'
+            columns: ['anuncio_id']
+            isOneToOne: false
+            referencedRelation: 'anuncios'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       perfiles: {
         Row: {
           codigo_otp: string | null
@@ -481,6 +582,51 @@ export type Database = {
     Functions: {
       aprobar_pago_con_vigencia: {
         Args: { p_origen?: string; p_pago_id: string }
+        Returns: Json
+      }
+      listar_visitas_ofertante: {
+        Args: { p_limite?: number }
+        Returns: {
+          anuncio_id: string
+          anuncio_titulo: string | null
+          created_at: string | null
+          id: string
+          visitante_id: string | null
+          visitante_nombre: string | null
+        }[]
+      }
+      registrar_visita_anuncio: {
+        Args: { p_anuncio_id: string }
+        Returns: Json
+      }
+      republicar_anuncio: {
+        Args: { p_anuncio_id: string }
+        Returns: Json
+      }
+      solicitar_otp_perfil: {
+        Args: {
+          p_codigo_hash: string
+          p_expira: string
+          p_nombre: string
+          p_server_secret: string
+          p_telefono: string
+        }
+        Returns: Json
+      }
+      toggle_anuncio_like: {
+        Args: { p_anuncio_id: string }
+        Returns: Json
+      }
+      toggle_favorito: {
+        Args: { p_anuncio_id: string }
+        Returns: Json
+      }
+      total_likes_anuncio: {
+        Args: { p_anuncio_id: string }
+        Returns: number
+      }
+      verificar_otp_perfil: {
+        Args: { p_codigo_hash: string }
         Returns: Json
       }
     }

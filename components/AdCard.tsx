@@ -27,7 +27,7 @@ export default function AdCard({
   fotos,
   es_vip,
   total_likes = 0,
-  telefono_verificado = true,
+  telefono_verificado = false,
   etiquetas = [],
 }: AdCardProps) {
   const mainPhoto = fotos && fotos.length > 0 ? fotos[0] : '/placeholder.jpg';

@@ -21,6 +21,21 @@ export function formatDate(dateString: string | null) {
   }).format(new Date(dateString));
 }
 
+export function getPlanBeneficiosExtras(plan: { caracteristicas?: unknown }): string[] {
+  return Array.isArray(plan.caracteristicas)
+    ? plan.caracteristicas.filter(
+        (item): item is string =>
+          typeof item === 'string' &&
+          item.trim().length > 0 &&
+          !/^hasta\s+\d+\s+fotos?$/i.test(item.trim())
+      )
+    : [];
+}
+
+export function getPlanBeneficios(plan: { limite_fotos: number; caracteristicas?: unknown }): string[] {
+  return [`Hasta ${plan.limite_fotos} fotos`, ...getPlanBeneficiosExtras(plan)];
+}
+
 /**
  * Optimiza y comprime una imagen en el navegador a formato WebP
  */

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServiceClient } from '@/lib/supabase/service';
 
-// Usamos el cliente con ANON_KEY o SERVICE_ROLE_KEY
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase =
+  createServiceClient() ||
+  createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -21,7 +23,7 @@ export async function GET(request: NextRequest) {
   // 1. Buscar el pago asociado al token
   const { data: pago, error: searchError } = await supabase
     .from('pagos')
-    .select('id, estado, token_usado, monto_esperado, plan:planes(nombre, dias_duracion)')
+    .select('id, estado, token_usado, monto_esperado, created_at, plan:planes(nombre, dias_duracion)')
     .eq('token_aprobacion', token)
     .single();
 
@@ -30,6 +32,20 @@ export async function GET(request: NextRequest) {
       renderHtml('Token Inválido', 'El enlace de aprobación no existe o ha expirado.', false),
       {
         status: 404,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      }
+    );
+  }
+
+  const tokenAgeMs = pago.created_at
+    ? Date.now() - new Date(pago.created_at).getTime()
+    : Number.POSITIVE_INFINITY;
+
+  if (tokenAgeMs > 24 * 60 * 60 * 1000) {
+    return new NextResponse(
+      renderHtml('Enlace Expirado', 'Este enlace de aprobación superó su vigencia de 24 horas.', false),
+      {
+        status: 410,
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       }
     );
@@ -61,6 +77,20 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (!rpcResult?.ok && !rpcResult?.success) {
+    return new NextResponse(
+      renderHtml(
+        'No se pudo aprobar el pago',
+        `El pago no se activó: ${rpcResult?.error || rpcResult?.message || 'resultado inválido'}.`,
+        false
+      ),
+      {
+        status: 409,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      }
+    );
+  }
+
   const vigencia = rpcResult?.vigente_hasta
     ? new Date(rpcResult.vigente_hasta).toLocaleString('es-PE', {
         dateStyle: 'full',
@@ -82,14 +112,27 @@ export async function GET(request: NextRequest) {
   );
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function renderHtml(titulo: string, descripcion: string, exito: boolean, fechaFin?: string) {
+  const safeTitulo = escapeHtml(titulo);
+  const safeDescripcion = escapeHtml(descripcion);
+  const safeFechaFin = fechaFin ? escapeHtml(fechaFin) : '';
+
   return `
     <!DOCTYPE html>
     <html lang="es">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${titulo} | Mordisco Admin</title>
+        <title>${safeTitulo} | Mordisco Admin</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
@@ -153,14 +196,14 @@ function renderHtml(titulo: string, descripcion: string, exito: boolean, fechaFi
       <body>
         <div class="card">
           <div class="icon">${exito ? '✓' : '✕'}</div>
-          <h1>${titulo}</h1>
-          <p>${descripcion}</p>
+          <h1>${safeTitulo}</h1>
+          <p>${safeDescripcion}</p>
           ${
             fechaFin
               ? `
             <div class="date-box">
               <div class="date-title">Vigencia Oficial Activada:</div>
-              <div class="date-val">${fechaFin}</div>
+              <div class="date-val">${safeFechaFin}</div>
             </div>
           `
               : ''

@@ -8,83 +8,185 @@
    - Environments: .env.local, .env
 
  ✓ Starting...
- ✓ Ready in 11.1s
+ ✓ Ready in 3.2s
  ○ Compiling / ...
- ✓ Compiled / in 8.6s (788 modules)
- GET / 200 in 9499ms
- ✓ Compiled in 839ms (322 modules)
- GET / 200 in 142ms
- GET / 200 in 36ms
+ ✓ Compiled / in 2.9s (790 modules)
+ GET / 200 in 3594ms
+ ✓ Compiled in 794ms (323 modules)
+ GET / 200 in 74ms
+ ✓ Compiled /login in 356ms (792 modules)
+ GET /login 200 in 666ms
+ ○ Compiling /ofertante ...
+ ✓ Compiled /ofertante in 830ms (882 modules)
+ GET /ofertante 307 in 1268ms
+ ✓ Compiled /favoritos in 224ms (893 modules)
+ GET /favoritos 200 in 479ms
  ○ Compiling /admin ...
- ✓ Compiled /admin in 2.8s (803 modules)
- GET /admin 200 in 2939ms
- GET /admin 200 in 48ms
- GET /admin 200 in 24ms
- ✓ Compiled in 659ms (817 modules)
- GET /admin 200 in 76ms
- ✓ Compiled in 321ms (817 modules)
- GET /admin 200 in 73ms
- GET / 200 in 35ms
- GET / 200 in 21ms
- ○ Compiling /publicar ...
- ✓ Compiled /publicar in 522ms (816 modules)
- GET /publicar 200 in 650ms
- GET /admin 200 in 44ms
- ✓ Compiled in 554ms (830 modules)
- GET /admin 200 in 123ms
- ✓ Compiled in 440ms (830 modules)
- GET /admin 200 in 82ms
- ✓ Compiled in 379ms (830 modules)
- GET /admin 200 in 136ms
- ✓ Compiled in 1221ms (834 modules)
- GET /admin 200 in 99ms
- ✓ Compiled in 356ms (834 modules)
- GET /admin 200 in 97ms
- ✓ Compiled in 508ms (834 modules)
- GET /admin 200 in 89ms
- GET / 200 in 29ms
- GET /publicar 200 in 29ms
- GET / 200 in 17ms
- GET /admin 200 in 18ms
- GET /publicar 200 in 20ms
- GET /publicar 200 in 24ms
- GET / 200 in 18ms
- GET /admin 200 in 71ms
- GET /publicar 200 in 29ms
+ ✓ Compiled /admin in 570ms (933 modules)
+ GET /admin 307 in 854ms
+ ✓ Compiled /api/ofertante/registro in 457ms (951 modules)
+ POST /api/ofertante/registro 200 in 2140ms
+ GET /admin 200 in 2332ms
+ ✓ Compiled /admin/cupones in 345ms (903 modules)
+ GET /admin/cupones 200 in 541ms
  GET /admin 200 in 25ms
- ✓ Compiled in 788ms (834 modules)
- GET /admin 200 in 282ms
- ✓ Compiled in 996ms (834 modules)
- GET /admin 200 in 117ms
- ✓ Compiled in 555ms (834 modules)
- GET /admin 200 in 85ms
- ✓ Compiled in 1202ms (836 modules)
- GET /admin 200 in 63ms
- ✓ Compiled in 365ms (836 modules)
- GET /admin 200 in 72ms
- ✓ Compiled in 465ms (836 modules)
- GET /admin 200 in 72ms
- ✓ Compiled in 649ms (836 modules)
- GET /admin 200 in 172ms
- ✓ Compiled in 678ms (836 modules)
- GET /admin 200 in 195ms
- ✓ Compiled in 417ms (836 modules)
- GET /admin 200 in 86ms
- ✓ Compiled in 438ms (836 modules)
- GET /admin 200 in 73ms
- ✓ Compiled in 907ms (838 modules)
- GET /admin 200 in 91ms
- ✓ Compiled in 363ms (838 modules)
- GET /admin 200 in 80ms
- ✓ Compiled in 353ms (838 modules)
- GET /admin 200 in 83ms
- GET /admin 200 in 247ms
- GET / 200 in 27ms
+ GET /admin/cupones 200 in 20ms
+ GET /admin 200 in 19ms
+ GET /admin/cupones 200 in 20ms
+ GET /admin 200 in 20ms
+ ✓ Compiled /admin/moderacion in 225ms (912 modules)
+ GET /admin/moderacion 200 in 351ms
+ GET /admin 200 in 26ms
+ GET /admin/cupones 200 in 30ms
+ GET /admin 200 in 19ms
+ GET /admin/cupones 200 in 24ms
+ GET /admin 200 in 20ms
+ GET /admin/cupones 200 in 26ms
+ GET /admin 200 in 24ms
+ GET /admin/moderacion 200 in 26ms
+ GET /admin 200 in 29ms
+ ✓ Compiled / in 272ms (576 modules)
+ GET / 200 in 390ms
+ ✓ Compiled /favoritos in 185ms (584 modules)
+ GET /favoritos 200 in 265ms
+ ○ Compiling /ofertante ...
+ ✓ Compiled /ofertante in 622ms (591 modules)
+ GET /ofertante 200 in 26ms
+ GET /ofertante 200 in 1490ms
+ ○ Compiling /publicar ...
+ ✓ Compiled /publicar in 648ms (955 modules)
+ GET /publicar 200 in 715ms
+ ✓ Compiled /api/otp/solicitar in 368ms (975 modules)
+ POST /api/otp/solicitar 500 in 1837ms
+ GET /admin 200 in 1359ms
+ GET /admin/cupones 200 in 36ms
+ GET /admin 200 in 20ms
+ GET /admin/cupones 200 in 24ms
  GET /admin 200 in 22ms
- GET /publicar 200 in 27ms
- ✓ Compiled in 456ms (838 modules)
+ GET /admin/cupones 200 in 23ms
+ GET /admin 200 in 22ms
+ ✓ Compiled in 781ms (956 modules)
+ GET /admin 200 in 273ms
+ ✓ Compiled in 215ms (370 modules)
+ GET /admin 200 in 59ms
+ ✓ Compiled in 196ms (370 modules)
+ GET /admin 200 in 54ms
+ ✓ Compiled in 570ms (956 modules)
+ GET /admin 200 in 174ms
+ ✓ Compiled in 344ms (956 modules)
+ GET /admin 200 in 133ms
+ ✓ Compiled in 587ms (956 modules)
+ GET /admin 200 in 132ms
+ ✓ Compiled in 920ms (956 modules)
+ GET /admin 200 in 218ms
+ ✓ Compiled /admin/cupones in 200ms (592 modules)
+ GET /admin/cupones 307 in 495ms
+ GET /admin/moderacion 307 in 83ms
+ GET /admin?tab=config 307 in 88ms
+ GET /admin 200 in 1692ms
+ GET /admin/cupones 200 in 23ms
+ GET /admin/moderacion 200 in 22ms
+ GET /admin?tab=etiquetas 200 in 21ms
+ GET /admin/cupones 200 in 26ms
+ GET /admin/moderacion 200 in 23ms
+ GET /publicar 200 in 30ms
+ GET /admin 200 in 1241ms
+ ✓ Compiled /login in 386ms (601 modules)
+ GET /login 200 in 493ms
+ GET /login 200 in 29ms
+ ✓ Compiled / in 425ms (608 modules)
+ GET / 200 in 487ms
+ GET /publicar 200 in 26ms
+ GET / 200 in 17ms
+ GET /publicar 200 in 24ms
+ GET /admin 200 in 92ms
+ GET /login?next=%2Fadmin 200 in 38ms
+ GET /login?next=%2Fadmin 200 in 29ms
+ GET /admin 200 in 1194ms
+ GET /admin 200 in 1255ms
+ GET /ofertante 200 in 745ms
+ GET /admin 200 in 1211ms
+ GET / 200 in 18ms
+ GET / 200 in 26ms
+ GET /favoritos 200 in 32ms
+ GET /admin 200 in 1282ms
+ GET /admin 200 in 22ms
+ GET /admin/cupones 200 in 29ms
+ GET /admin?tab=etiquetas 200 in 20ms
+ GET /admin/cupones 200 in 25ms
+ GET /admin/moderacion 200 in 28ms
+ GET /admin/cupones 200 in 21ms
+ GET /admin?tab=etiquetas 200 in 20ms
+ GET /admin/cupones 200 in 24ms
+ GET /admin?tab=etiquetas 200 in 20ms
+ GET /admin/cupones 200 in 25ms
+ GET /admin?tab=etiquetas 200 in 25ms
+ GET /admin/cupones 200 in 22ms
+ GET /admin?tab=etiquetas 200 in 20ms
+ GET /admin/cupones 200 in 24ms
+ GET /admin?tab=config 200 in 22ms
+ GET /admin/cupones 200 in 21ms
+ GET /admin?tab=etiquetas 200 in 24ms
+ GET /admin/cupones 200 in 23ms
+ GET /admin/moderacion 200 in 21ms
+ GET /admin/cupones 200 in 22ms
+ GET /admin?tab=config 200 in 23ms
+ GET /publicar 200 in 21ms
+ ✓ Compiled /api/otp/solicitar in 415ms (612 modules)
+ POST /api/otp/solicitar 500 in 1684ms
+ ✓ Compiled in 763ms (945 modules)
  GET /publicar 200 in 184ms
- ✓ Compiled in 273ms (838 modules)
- GET /publicar 200 in 81ms
- GET /admin 200 in 43ms
- GET /admin 200 in 215ms
+ ✓ Compiled in 228ms (370 modules)
+ GET /publicar 200 in 67ms
+ ✓ Compiled in 128ms (370 modules)
+ GET /publicar 200 in 48ms
+ ✓ Compiled in 185ms (370 modules)
+ GET /publicar 200 in 63ms
+ ✓ Compiled /api/otp/solicitar in 375ms (595 modules)
+ GET /publicar 200 in 285ms
+OTP solicitar RPC error: value too long for type character varying(6) null null
+ POST /api/otp/solicitar 500 in 1577ms
+ ✓ Compiled in 324ms (965 modules)
+ GET /publicar 200 in 115ms
+ ✓ Compiled in 438ms (965 modules)
+ GET /publicar 200 in 68ms
+ ✓ Compiled in 288ms (965 modules)
+ GET /publicar 200 in 70ms
+ ✓ Compiled in 730ms (965 modules)
+ GET /publicar 200 in 80ms
+ GET /publicar 200 in 233ms
+ POST /api/otp/solicitar 200 in 1490ms
+ ✓ Compiled /api/otp/verificar in 422ms (967 modules)
+ GET /publicar 200 in 159ms
+ POST /api/otp/verificar 200 in 1451ms
+ GET /publicar?plan=2b067fc3-0af0-40e4-b17d-525c6dce337f 200 in 27ms
+ ○ Compiling /pago/[anuncioId] ...
+ ✓ Compiled /pago/[anuncioId] in 676ms (945 modules)
+ GET /pago/6629f316-59cf-47e5-a055-06d6570e3329?plan=2b067fc3-0af0-40e4-b17d-525c6dce337f 200 in 1444ms
+ ✓ Compiled /api/notificar-pago in 351ms (957 modules)
+ POST /api/notificar-pago 200 in 1926ms
+ ○ Compiling /ofertante ...
+ ✓ Compiled /ofertante in 546ms (585 modules)
+ GET /ofertante 200 in 1857ms
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 539ms (590 modules)
+ GET /admin 200 in 20ms
+ GET /admin 200 in 20ms
+ GET /admin 200 in 11210ms
+ ✓ Compiled /login in 332ms (599 modules)
+ GET /login?next=%2Fadmin 200 in 410ms
+ GET /login?next=%2Fadmin 200 in 24ms
+ GET /ofertante 200 in 10577ms
+ GET /login?mode=register&next=%2Fofertante 200 in 31ms
+ GET /login?mode=register&next=%2Fofertante 200 in 24ms
+ GET /admin 200 in 47ms
+ GET /login?next=%2Fadmin 200 in 36ms
+ GET /login?next=%2Fadmin 200 in 26ms
+ ✓ Compiled / in 485ms (603 modules)
+ GET / 200 in 559ms
+ GET /admin 200 in 65ms
+ GET /login?next=%2Fadmin 200 in 34ms
+ GET /login?next=%2Fadmin 200 in 26ms
+ GET /ofertante 200 in 37ms
+ GET /login?mode=register&next=%2Fofertante 200 in 30ms
+ GET /login?mode=register&next=%2Fofertante 200 in 23ms

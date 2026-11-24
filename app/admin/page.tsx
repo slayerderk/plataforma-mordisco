@@ -1,11 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Bell,
+  LogOut,
   ShieldCheck,
   QrCode,
   Layers,
+  MessageCircle,
   Tag,
   DollarSign,
   CheckCircle,
@@ -13,7 +17,6 @@ import {
   Eye,
   RefreshCw,
   Sparkles,
-  Settings,
   Upload,
   Calendar,
   Pencil,
@@ -22,12 +25,62 @@ import {
   X,
   GripVertical,
   Power,
+  Plus,
+  Save,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDate, getPlanBeneficios, getPlanBeneficiosExtras } from '@/lib/utils';
+
+type PlanForm = {
+  id: string | null;
+  nombre: string;
+  precio: number;
+  dias_duracion: number;
+  limite_fotos: number;
+  orden: number;
+  activo: boolean;
+  es_destacado: boolean;
+  caracteristicas: string[];
+};
+
+function planDesdeFila(plan: any): PlanForm {
+  return {
+    id: plan.id ?? null,
+    nombre: plan.nombre ?? '',
+    precio: Number(plan.precio ?? 0),
+    dias_duracion: Number(plan.dias_duracion ?? 0),
+    limite_fotos: Number(plan.limite_fotos ?? 1),
+    orden: Number(plan.orden ?? 0),
+    activo: Boolean(plan.activo),
+    es_destacado: Boolean(plan.es_destacado),
+    caracteristicas: getPlanBeneficiosExtras(plan),
+  };
+}
+
+function validarPlan(plan: PlanForm): string | null {
+  if (!plan.nombre.trim()) return 'Ingresa un nombre para cada plan.';
+  if (plan.precio < 0 || plan.dias_duracion < 0 || plan.limite_fotos < 1) {
+    return 'Revisa el precio, la duración y el límite de fotos.';
+  }
+  return null;
+}
+
+function payloadPlan(plan: PlanForm) {
+  return {
+    nombre: plan.nombre.trim(),
+    precio: Number(plan.precio),
+    dias_duracion: Number(plan.dias_duracion),
+    limite_fotos: Number(plan.limite_fotos),
+    orden: Number(plan.orden),
+    activo: Boolean(plan.activo),
+    es_destacado: Boolean(plan.es_destacado),
+    caracteristicas: getPlanBeneficiosExtras(plan),
+  };
+}
 
 export default function AdminDashboardPage() {
   const supabase = createClient();
+  const router = useRouter();
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<'pagos' | 'config' | 'planes' | 'etiquetas'>('pagos');
@@ -38,7 +91,12 @@ export default function AdminDashboardPage() {
   // Data
   const [pagos, setPagos] = useState<any[]>([]);
   const [config, setConfig] = useState<any>(null);
-  const [planes, setPlanes] = useState<any[]>([]);
+  const [planesDraft, setPlanesDraft] = useState<PlanForm[]>([]);
+  const [planesBase, setPlanesBase] = useState<PlanForm[]>([]);
+  const [savingPlanId, setSavingPlanId] = useState<string | null>(null);
+  const [savingPlanes, setSavingPlanes] = useState(false);
+  const [planStatus, setPlanStatus] = useState<string | null>(null);
+  const [etiquetaStatus, setEtiquetaStatus] = useState<string | null>(null);
   const [etiquetas, setEtiquetas] = useState<any[]>([]);
   const [nuevaEtiqueta, setNuevaEtiqueta] = useState('');
   const [editingEtiquetaId, setEditingEtiquetaId] = useState<string | null>(null);
@@ -53,6 +111,11 @@ export default function AdminDashboardPage() {
   // QR Upload
   const [uploadingQR, setUploadingQR] = useState(false);
 
+  const planesDirty = useMemo(
+    () => JSON.stringify(planesDraft) !== JSON.stringify(planesBase),
+    [planesDraft, planesBase]
+  );
+
   // Load Data
   const loadAdminData = async () => {
     setLoading(true);
@@ -66,14 +129,24 @@ export default function AdminDashboardPage() {
           plan:planes(nombre, dias_duracion, precio)
         `)
         .order('created_at', { ascending: false }),
-      supabase.from('configuracion_admin').select('*').eq('id', 1).single(),
+      supabase
+        .from('configuracion_admin')
+        .select(
+          'id, whatsapp_admin, modo_whatsapp, yape_activo, qr_yape_url, plin_activo, qr_plin_url, telefono_pago, titular_pago, peso_max_foto_mb, dias_espera_republicar, logo_url, updated_at'
+        )
+        .eq('id', 1)
+        .single(),
       supabase.from('planes').select('*').order('orden'),
-      supabase.from('etiquetas').select('*').order('orden').order('nombre'),
+      supabase.from('etiquetas').select('*').order('orden'),
     ]);
 
     if (pagosRes.data) setPagos(pagosRes.data);
     if (configRes.data) setConfig(configRes.data);
-    if (planesRes.data) setPlanes(planesRes.data);
+    if (planesRes.data) {
+      const planesCargados = planesRes.data.map(planDesdeFila);
+      setPlanesDraft(planesCargados);
+      setPlanesBase(planesCargados);
+    }
     if (etqsRes.data) setEtiquetas(etqsRes.data);
 
     setLoading(false);
@@ -105,6 +178,13 @@ export default function AdminDashboardPage() {
     return () => {
       supabase.removeChannel(channelPagos);
     };
+  }, []);
+
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'pagos' || tab === 'config' || tab === 'planes' || tab === 'etiquetas') {
+      setActiveTab(tab);
+    }
   }, []);
 
   // Aprobar Pago
@@ -169,7 +249,8 @@ export default function AdminDashboardPage() {
   // Agregar Etiqueta
   const handleCrearEtiqueta = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nuevaEtiqueta.trim()) return;
+    const nombre = nuevaEtiqueta.trim();
+    if (!nombre) return;
 
     const nextOrden = etiquetas.length > 0
       ? Math.max(...etiquetas.map((etq) => etq.orden ?? 0)) + 1
@@ -177,15 +258,16 @@ export default function AdminDashboardPage() {
 
     const { error } = await supabase
       .from('etiquetas')
-      .insert({ nombre: nuevaEtiqueta.trim(), activo: true, orden: nextOrden });
+      .insert({ nombre, activo: true, orden: nextOrden });
 
     if (error) {
-      alert('Error al agregar etiqueta: ' + error.message);
+      setEtiquetaStatus(`No se pudo agregar la etiqueta: ${error.message}`);
       return;
     }
 
     setNuevaEtiqueta('');
-    loadAdminData();
+    setEtiquetaStatus(`Etiqueta "${nombre}" agregada.`);
+    await loadAdminData();
   };
 
   // Editar Etiqueta
@@ -196,13 +278,14 @@ export default function AdminDashboardPage() {
     const { error } = await supabase.from('etiquetas').update({ nombre }).eq('id', id);
 
     if (error) {
-      alert('Error al actualizar etiqueta: ' + error.message);
+      setEtiquetaStatus(`No se pudo actualizar la etiqueta: ${error.message}`);
       return;
     }
 
     setEtiquetas((prev) => prev.map((etq) => (etq.id === id ? { ...etq, nombre } : etq)));
     setEditingEtiquetaId(null);
     setEditingEtiquetaNombre('');
+    setEtiquetaStatus(`Nombre actualizado a "${nombre}".`);
   };
 
   // Activar / Desactivar Etiqueta
@@ -212,11 +295,12 @@ export default function AdminDashboardPage() {
     const { error } = await supabase.from('etiquetas').update({ activo }).eq('id', etq.id);
 
     if (error) {
-      alert('Error al actualizar etiqueta: ' + error.message);
+      setEtiquetaStatus(`No se pudo actualizar la etiqueta: ${error.message}`);
       return;
     }
 
     setEtiquetas((prev) => prev.map((e) => (e.id === etq.id ? { ...e, activo } : e)));
+    setEtiquetaStatus(activo ? `Etiqueta "${etq.nombre}" activada.` : `Etiqueta "${etq.nombre}" desactivada.`);
   };
 
   // Reordenar Etiquetas (Arrastrar y soltar)
@@ -259,9 +343,12 @@ export default function AdminDashboardPage() {
 
     const failed = results.find((result) => result.error);
     if (failed?.error) {
-      alert('Error al guardar el orden de las etiquetas: ' + failed.error.message);
-      loadAdminData();
+      setEtiquetaStatus(`No se pudo guardar el orden: ${failed.error.message}`);
+      await loadAdminData();
+      return;
     }
+
+    setEtiquetaStatus('Orden de etiquetas guardado.');
   };
 
   const handleDragEndEtiqueta = () => {
@@ -281,28 +368,132 @@ export default function AdminDashboardPage() {
       .eq('etiqueta_id', etq.id);
 
     if (linkError) {
-      alert('No se pudo quitar la etiqueta de los anuncios: ' + linkError.message);
+      setEtiquetaStatus(`No se pudo quitar la etiqueta de los anuncios: ${linkError.message}`);
       return;
     }
 
     const { error } = await supabase.from('etiquetas').delete().eq('id', etq.id);
 
     if (error) {
-      alert('Error al eliminar etiqueta: ' + error.message);
+      setEtiquetaStatus(`No se pudo eliminar la etiqueta: ${error.message}`);
       return;
     }
 
     setEtiquetas((prev) => prev.filter((e) => e.id !== etq.id));
+    setEtiquetaStatus(`Etiqueta "${etq.nombre}" eliminada.`);
     if (editingEtiquetaId === etq.id) {
       setEditingEtiquetaId(null);
       setEditingEtiquetaNombre('');
     }
   };
 
-  // Actualizar Plan
-  const handleUpdatePlan = async (planId: string, campo: string, valor: any) => {
-    await supabase.from('planes').update({ [campo]: valor }).eq('id', planId);
-    setPlanes(planes.map((p) => (p.id === planId ? { ...p, [campo]: valor } : p)));
+  const updatePlanField = (index: number, campo: keyof PlanForm, valor: PlanForm[keyof PlanForm]) => {
+    setPlanesDraft((prev) =>
+      prev.map((plan, i) => (i === index ? ({ ...plan, [campo]: valor } as PlanForm) : plan))
+    );
+  };
+
+  const handleNuevoPlan = () => {
+    const nextOrden = planesDraft.length > 0
+      ? Math.max(...planesDraft.map((plan) => plan.orden)) + 1
+      : 0;
+
+    setPlanesDraft((prev) => [
+      ...prev,
+      {
+        id: null,
+        nombre: '',
+        precio: 0,
+        dias_duracion: 0,
+        limite_fotos: 1,
+        orden: nextOrden,
+        activo: true,
+        es_destacado: false,
+        caracteristicas: [],
+      },
+    ]);
+  };
+
+  const handleDescartarPlanNuevo = (index: number) => {
+    setPlanesDraft((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGuardarTodos = async () => {
+    if (!planesDirty || savingPlanes) return;
+
+    const invalido = planesDraft
+      .map((plan) => ({ plan, error: validarPlan(plan) }))
+      .find((item) => item.error);
+
+    if (invalido) {
+      setPlanStatus(
+        `No se pudo guardar "${invalido.plan.nombre || 'Nuevo plan'}": ${invalido.error}`
+      );
+      return;
+    }
+
+    setSavingPlanes(true);
+    setPlanStatus(null);
+
+    const results = await Promise.allSettled(
+      planesDraft.map(async (plan) => {
+        const payload = payloadPlan(plan);
+        const { error } = plan.id
+          ? await supabase.from('planes').update(payload).eq('id', plan.id)
+          : await supabase.from('planes').insert(payload);
+
+        if (error) {
+          throw new Error(`${plan.nombre || 'Nuevo plan'}: ${error.message}`);
+        }
+      })
+    );
+
+    const errors = results
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) =>
+        result.reason instanceof Error ? result.reason.message : String(result.reason)
+      );
+
+    setSavingPlanes(false);
+
+    if (errors.length > 0) {
+      setPlanStatus(`No se pudieron guardar algunos planes: ${errors.join(' | ')}`);
+      await loadAdminData();
+      return;
+    }
+
+    setPlanStatus('Todos los cambios de planes se guardaron correctamente.');
+    await loadAdminData();
+  };
+
+  const handleTogglePlanActivo = async (index: number) => {
+    const plan = planesDraft[index];
+    if (!plan.id) return;
+
+    const activo = !plan.activo;
+    setSavingPlanId(plan.id);
+    setPlanStatus(null);
+
+    setPlanesDraft((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, activo } : item))
+    );
+    setPlanesBase((prev) =>
+      prev.map((item) => (item.id === plan.id ? { ...item, activo } : item))
+    );
+
+    const { error } = await supabase.from('planes').update({ activo }).eq('id', plan.id);
+
+    setSavingPlanId(null);
+
+    if (error) {
+      setPlanStatus(
+        `No se pudo ${activo ? 'activar' : 'inactivar'} "${plan.nombre}": ${error.message}`
+      );
+      await loadAdminData();
+      return;
+    }
+
+    setPlanStatus(`Plan "${plan.nombre}" ${activo ? 'activado' : 'inactivado'} correctamente.`);
   };
 
   return (
@@ -359,6 +550,18 @@ export default function AdminDashboardPage() {
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Refrescar</span>
           </button>
+
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              router.replace('/login');
+              router.refresh();
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-xs font-semibold text-rose-400 border border-rose-500/20 transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Salir</span>
+          </button>
         </div>
       </div>
 
@@ -407,6 +610,22 @@ export default function AdminDashboardPage() {
           <Tag className="w-4 h-4" />
           <span>Etiquetas (Chips)</span>
         </button>
+
+        <Link
+          href="/admin/cupones"
+          className="px-4 py-2.5 rounded-xl flex items-center gap-2 text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
+        >
+          <DollarSign className="w-4 h-4" />
+          <span>Cupones</span>
+        </Link>
+
+        <Link
+          href="/admin/moderacion"
+          className="px-4 py-2.5 rounded-xl flex items-center gap-2 text-zinc-400 hover:text-white hover:bg-white/5 transition-all"
+        >
+          <MessageCircle className="w-4 h-4" />
+          <span>Moderación</span>
+        </Link>
       </div>
 
       {/* TAB 1: GESTIÓN DE PAGOS Y ENLACE MÁGICO */}
@@ -604,49 +823,46 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* Evolution API Connection Settings */}
-            <div className="p-4 rounded-xl bg-dark-900/60 border border-white/5 flex flex-col gap-3">
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Settings className="w-3.5 h-3.5 text-brand-500" />
-                Conexión Evolution API (Para Envíos Autónomos y OTP)
+            <div className="p-4 rounded-xl bg-dark-900/60 border border-white/5">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                Evolution API y OTP
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] text-zinc-400 block mb-1">URL de Evolution API</label>
-                  <input
-                    type="text"
-                    value={config.evolution_api_url || ''}
-                    onChange={(e) => setConfig({ ...config, evolution_api_url: e.target.value })}
-                    placeholder="Ej. http://localhost:8080 o https://tu-vps.com"
-                    className="w-full bg-dark-950 border border-white/10 rounded-lg p-2 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-zinc-400 block mb-1">API Key Global</label>
-                  <input
-                    type="password"
-                    value={config.evolution_api_key || ''}
-                    onChange={(e) => setConfig({ ...config, evolution_api_key: e.target.value })}
-                    placeholder="Tu clave secreta de Evolution API"
-                    className="w-full bg-dark-950 border border-white/10 rounded-lg p-2 text-xs text-white"
-                  />
-                </div>
+              <p className="text-[11px] text-zinc-400 mt-2 leading-relaxed">
+                La URL, la API key y el secreto OTP se configuran solo en las variables de entorno
+                del servidor. Ya no se guardan ni se leen desde el navegador.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-dark-900/60 border border-white/5">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                Espera para republicar anuncios
+              </h4>
+              <p className="text-[11px] text-zinc-400 mt-2 leading-relaxed">
+                Días que un ofertante debe esperar antes de republicar un anuncio aprobado.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={config.dias_espera_republicar ?? 0}
+                  onChange={(e) => setConfig({ ...config, dias_espera_republicar: Number(e.target.value) })}
+                  className="w-28 bg-dark-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                />
+                <button
+                  onClick={async () => {
+                    await supabase
+                      .from('configuracion_admin')
+                      .update({ dias_espera_republicar: config.dias_espera_republicar })
+                      .eq('id', 1);
+                    alert('Días de espera para republicar actualizados.');
+                    loadAdminData();
+                  }}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold"
+                >
+                  Guardar
+                </button>
               </div>
-              <button
-                onClick={async () => {
-                  await supabase
-                    .from('configuracion_admin')
-                    .update({
-                      evolution_api_url: config.evolution_api_url,
-                      evolution_api_key: config.evolution_api_key,
-                    })
-                    .eq('id', 1);
-                  alert('¡Credenciales de Evolution API guardadas!');
-                }}
-                className="self-end px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold"
-              >
-                Guardar Configuración de API
-              </button>
             </div>
           </div>
 
@@ -740,46 +956,220 @@ export default function AdminDashboardPage() {
       {/* TAB 3: GESTIÓN DE PLANES Y LÍMITE DE FOTOS */}
       {activeTab === 'planes' && (
         <div className="flex flex-col gap-4">
-          <h2 className="text-base font-bold text-white">Editar Tarifas, Duración y Límites de Fotos</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {planes.map((plan) => (
-              <div key={plan.id} className="glass-panel p-5 rounded-2xl border border-white/10 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-white">{plan.nombre}</span>
-                  <span className="text-[10px] text-zinc-400">{plan.es_destacado ? 'VIP' : 'Normal'}</span>
-                </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-white">Editar tarifas, duración, límites y beneficios</h2>
+              <p className="text-[11px] text-zinc-500 mt-1">
+                Los cambios se aplican al presionar &quot;Guardar todos los cambios&quot;.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start">
+              <button
+                type="button"
+                onClick={handleGuardarTodos}
+                disabled={!planesDirty || savingPlanes}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {savingPlanes ? 'Guardando...' : 'Guardar todos los cambios'}
+              </button>
+              <button
+                type="button"
+                onClick={handleNuevoPlan}
+                disabled={savingPlanes}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-xs font-bold transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Nuevo plan
+              </button>
+            </div>
+          </div>
 
-                <div>
-                  <label className="text-[11px] text-zinc-400 block mb-1">Precio (PEN S/)</label>
-                  <input
-                    type="number"
-                    value={plan.precio}
-                    onChange={(e) => handleUpdatePlan(plan.id, 'precio', Number(e.target.value))}
-                    className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
-                  />
-                </div>
+          {planStatus && (
+            <div
+              className={`glass-panel p-3 rounded-xl text-xs ${
+                planStatus.startsWith('No se pudo')
+                  ? 'text-rose-300 border border-rose-500/30'
+                  : 'text-emerald-300 border border-emerald-500/30'
+              }`}
+            >
+              {planStatus}
+            </div>
+          )}
 
-                <div>
-                  <label className="text-[11px] text-zinc-400 block mb-1">Duración en Días (0 = Permanente)</label>
-                  <input
-                    type="number"
-                    value={plan.dias_duracion}
-                    onChange={(e) => handleUpdatePlan(plan.id, 'dias_duracion', Number(e.target.value))}
-                    className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
-                  />
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {planesDraft.map((plan, index) => {
+              return (
+                <div
+                  key={plan.id ?? `nuevo-${index}`}
+                  className="glass-panel p-5 rounded-2xl border border-white/10 flex flex-col gap-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-white">
+                      {plan.nombre || 'Nuevo plan'}
+                    </span>
+                    <span className={`text-[10px] font-bold ${plan.activo ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                      {plan.activo ? 'ACTIVO' : 'INACTIVO'}
+                    </span>
+                  </div>
 
-                <div>
-                  <label className="text-[11px] text-zinc-400 block mb-1">Límite de Fotos Permitidas</label>
-                  <input
-                    type="number"
-                    value={plan.limite_fotos}
-                    onChange={(e) => handleUpdatePlan(plan.id, 'limite_fotos', Number(e.target.value))}
-                    className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
-                  />
+                  <div>
+                    <label className="text-[11px] text-zinc-400 block mb-1">Nombre del plan</label>
+                    <input
+                      type="text"
+                      value={plan.nombre}
+                      onChange={(e) => updatePlanField(index, 'nombre', e.target.value)}
+                      className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] text-zinc-400 block mb-1">Precio (PEN S/)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={plan.precio}
+                        onChange={(e) => updatePlanField(index, 'precio', Number(e.target.value))}
+                        className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-zinc-400 block mb-1">Duración en días (0 = permanente)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={plan.dias_duracion}
+                        onChange={(e) => updatePlanField(index, 'dias_duracion', Number(e.target.value))}
+                        className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-zinc-400 block mb-1">Límite de fotos</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={plan.limite_fotos}
+                        onChange={(e) => updatePlanField(index, 'limite_fotos', Number(e.target.value))}
+                        className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-zinc-400 block mb-1">Orden</label>
+                      <input
+                        type="number"
+                        value={plan.orden}
+                        onChange={(e) => updatePlanField(index, 'orden', Number(e.target.value))}
+                        className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-zinc-400 block mb-1">
+                      Beneficios (uno por línea). &quot;Hasta X fotos&quot; se genera automáticamente.
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={plan.caracteristicas.join('\n')}
+                      onChange={(e) => updatePlanField(index, 'caracteristicas', e.target.value.split('\n'))}
+                      className="w-full bg-dark-900 border border-white/10 rounded-lg p-2 text-xs text-white resize-y"
+                    />
+                  </div>
+
+                  <label className="flex items-start gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={plan.es_destacado}
+                      onChange={(e) => updatePlanField(index, 'es_destacado', e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-brand-400 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-dark-950 ${
+                        plan.es_destacado ? 'bg-brand-600' : 'bg-white/15'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          plan.es_destacado ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </span>
+                    <span className="text-[11px] text-zinc-300 leading-tight">
+                      Mostrar insignia <strong className="text-white">&quot;RECOMENDADO VIP&quot;</strong> en la vista pública
+                    </span>
+                  </label>
+
+                  <div className="rounded-xl bg-dark-900/60 border border-white/10 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
+                      Vista previa en el home
+                    </div>
+                    {plan.es_destacado && (
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-brand-600 text-white text-[9px] font-extrabold tracking-wider uppercase mb-2">
+                        Recomendado VIP
+                      </span>
+                    )}
+                    <div className="text-sm font-bold text-white">{plan.nombre || 'Nombre del plan'}</div>
+                    <div className="flex items-baseline gap-1 my-1.5">
+                      <span className="text-xl font-extrabold text-white">{formatPrice(plan.precio)}</span>
+                      <span className="text-[11px] text-zinc-400">
+                        {plan.dias_duracion > 0 ? `/ por ${plan.dias_duracion} días` : '/ permanente'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-zinc-300">
+                      Límite de fotos: <strong className="text-white">{plan.limite_fotos} fotos</strong>
+                    </div>
+                    <ul className="mt-2 space-y-1">
+                      {getPlanBeneficios(plan).map((beneficio, i) => (
+                        <li key={i} className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                          <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                          {beneficio}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 py-2 rounded-lg bg-white/10 text-center text-[11px] font-bold text-white">
+                      Publicar con este plan
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mt-auto pt-1">
+                    {plan.id ? (
+                      <button
+                        type="button"
+                        disabled={savingPlanId === plan.id}
+                        onClick={() => handleTogglePlanActivo(index)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${
+                          plan.activo
+                            ? 'bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20'
+                            : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                        }`}
+                      >
+                        {savingPlanId === plan.id
+                          ? 'Guardando...'
+                          : plan.activo
+                            ? 'Inactivar'
+                            : 'Activar'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDescartarPlanNuevo(index)}
+                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 text-xs font-bold border border-white/10"
+                      >
+                        Descartar
+                      </button>
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+
+            {planesDraft.length === 0 && (
+              <div className="glass-panel p-8 rounded-2xl text-center text-xs text-zinc-500">
+                No hay planes creados todavía.
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -793,6 +1183,19 @@ export default function AdminDashboardPage() {
               Arrastra las etiquetas con el mouse para definir el orden en que aparecen.
             </p>
           </div>
+
+          {etiquetaStatus && (
+            <div
+              className={`rounded-xl p-3 text-xs border ${
+                etiquetaStatus.startsWith('No se pudo')
+                  ? 'text-rose-300 border-rose-500/30 bg-rose-500/5'
+                  : 'text-emerald-300 border-emerald-500/30 bg-emerald-500/5'
+              }`}
+            >
+              {etiquetaStatus}
+            </div>
+          )}
+
           <form onSubmit={handleCrearEtiqueta} className="flex gap-2">
             <input
               type="text"

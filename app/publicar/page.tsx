@@ -1,13 +1,30 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Upload, Sparkles, Check, ArrowRight, ShieldCheck, MapPin, Globe, Image as ImageIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { requireOfertanteSession } from '@/lib/supabase/ofertante';
 import { compressImageToWebP, formatPrice } from '@/lib/utils';
 
 export default function PublicarPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-4xl mx-auto px-4 py-12 text-center text-sm text-zinc-400">
+          Cargando formulario...
+        </div>
+      }
+    >
+      <PublicarContent />
+    </Suspense>
+  );
+}
+
+function PublicarContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const planParam = searchParams.get('plan');
   const supabase = createClient();
 
   // Form State
@@ -33,6 +50,15 @@ export default function PublicarPage() {
   const [planes, setPlanes] = useState<any[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
 
+  // OTP verification
+  const [perfilId, setPerfilId] = useState('');
+  const [otpEnviado, setOtpEnviado] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [otpDebugCode, setOtpDebugCode] = useState('');
+  const [otpEnviando, setOtpEnviando] = useState(false);
+  const [otpVerificando, setOtpVerificando] = useState(false);
+  const [telefonoVerificado, setTelefonoVerificado] = useState(false);
+
   // Photos
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
@@ -52,13 +78,33 @@ export default function PublicarPage() {
       if (tagsRes.data) setAllTags(tagsRes.data);
       if (planesRes.data) {
         setPlanes(planesRes.data);
-        if (planesRes.data.length > 0) {
+        const planSolicitado = planParam
+          ? planesRes.data.find((plan) => plan.id === planParam)
+          : undefined;
+
+        if (planSolicitado) {
+          setSelectedPlanId(planSolicitado.id);
+        } else if (planesRes.data.length > 0) {
           setSelectedPlanId(planesRes.data[0].id);
+        }
+
+        if (planParam && !planSolicitado) {
+          setErrorMsg('El plan indicado no está disponible; se seleccionó el primero.');
         }
       }
     }
     loadInitial();
   }, []);
+
+  useEffect(() => {
+    if (!planParam || planes.length === 0) return;
+
+    const planSolicitado = planes.find((plan) => plan.id === planParam);
+    if (planSolicitado) {
+      setSelectedPlanId(planSolicitado.id);
+      setErrorMsg('');
+    }
+  }, [planParam, planes]);
 
   // Cascade Provincias
   useEffect(() => {
@@ -102,6 +148,17 @@ export default function PublicarPage() {
   const activePlan = planes.find((p) => p.id === selectedPlanId);
   const photoLimit = activePlan?.limite_fotos || 5;
 
+  useEffect(() => {
+    if (photos.length <= photoLimit) return;
+
+    const recortadas = photos.length - photoLimit;
+    setPhotos((prev) => prev.slice(0, photoLimit));
+    setPhotoPreviews((prev) => prev.slice(0, photoLimit));
+    setErrorMsg(
+      `Tu plan seleccionado permite un máximo de ${photoLimit} fotos. Se quitaron ${recortadas}.`
+    );
+  }, [photoLimit]);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const files = Array.from(e.target.files);
@@ -138,6 +195,87 @@ export default function PublicarPage() {
     setPhotoPreviews(photoPreviews.filter((_, i) => i !== index));
   };
 
+  const handleEnviarOtp = async () => {
+    setErrorMsg('');
+    setOtpDebugCode('');
+    setOtpEnviando(true);
+
+    try {
+      const cleanTel = telefono.replace(/\D/g, '');
+      if (cleanTel.length < 9) {
+        throw new Error('Ingresa un número de WhatsApp válido.');
+      }
+
+      const user = await requireOfertanteSession(supabase, router, '/publicar');
+      const response = await fetch('/api/otp/solicitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telefono: cleanTel,
+          nombre: nombreComercial || 'Ofertante Mordisco',
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'No se pudo enviar el código OTP.');
+      }
+
+      setPerfilId(user.id);
+      setTelefonoVerificado(false);
+      setOtpEnviado(true);
+      setOtpInput('');
+      setOtpDebugCode(data.debugCode || '');
+
+      if (data.warning) {
+        setErrorMsg(data.warning);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'No se pudo enviar el código OTP.');
+      setOtpEnviado(false);
+    } finally {
+      setOtpEnviando(false);
+    }
+  };
+
+  const handleVerificarOtp = async () => {
+    setErrorMsg('');
+
+    if (!perfilId) {
+      setErrorMsg('Solicita un código antes de verificarlo.');
+      return;
+    }
+
+    if (!/^\d{6}$/.test(otpInput)) {
+      setErrorMsg('Ingresa el código de 6 dígitos.');
+      return;
+    }
+
+    setOtpVerificando(true);
+
+    try {
+      await requireOfertanteSession(supabase, router, '/publicar');
+      const response = await fetch('/api/otp/verificar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo: otpInput }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'No se pudo verificar el código.');
+      }
+
+      setTelefonoVerificado(true);
+      setOtpDebugCode('');
+      setOtpInput('');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'No se pudo verificar el código.');
+    } finally {
+      setOtpVerificando(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -152,38 +290,36 @@ export default function PublicarPage() {
       return;
     }
 
+    if (!activePlan) {
+      setErrorMsg('Selecciona un plan antes de publicar.');
+      return;
+    }
+
+    if (!telefonoVerificado || !perfilId) {
+      setErrorMsg('Verifica tu WhatsApp con el código OTP antes de publicar.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      // 1. Obtener o crear perfil temporal anónimo (o sesión)
-      let usuarioId = '00000000-0000-0000-0000-000000000000';
-      const { data: authUser } = await supabase.auth.getUser();
-
-      if (authUser?.user) {
-        usuarioId = authUser.user.id;
-      } else {
-        // En desarrollo o demo, creamos un perfil en public.perfiles
-        const cleanTel = telefono.replace(/\D/g, '');
-        const { data: existingProf } = await supabase
-          .from('perfiles')
-          .select('id')
-          .eq('telefono', cleanTel)
-          .maybeSingle();
-
-        if (existingProf) {
-          usuarioId = existingProf.id;
-        } else {
-          // Generar ID único para el ofertante
-          const newId = crypto.randomUUID();
-          await supabase.from('perfiles').insert({
-            id: newId,
-            nombre_comercial: nombreComercial || 'Ofertante Mordisco',
-            telefono: cleanTel,
-            telefono_verificado: true,
-          });
-          usuarioId = newId;
-        }
+      // 1. Usar el perfil ya verificado por OTP
+      const authUser = await requireOfertanteSession(supabase, router, '/publicar');
+      if (authUser.id !== perfilId) {
+        throw new Error('La sesión de verificación cambió. Vuelve a verificar tu WhatsApp.');
       }
+
+      const { data: perfilVerificado } = await supabase
+        .from('perfiles')
+        .select('telefono_verificado')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (!perfilVerificado?.telefono_verificado) {
+        throw new Error('WhatsApp no verificado. Solicita y valida el código OTP.');
+      }
+
+      const usuarioId = authUser.id;
 
       // 2. Subir fotos a Supabase Storage
       const uploadedUrls: string[] = [];
@@ -214,14 +350,28 @@ export default function PublicarPage() {
           permitir_comentarios: permitirComentarios,
           fotos: uploadedUrls.length > 0 ? uploadedUrls : ['/placeholder.jpg'],
           plan_id: selectedPlanId,
-          es_vip: !isPaid ? false : false, // se activa cuando paga
-          activo: true,
+          es_vip: false,
+          activo: !isPaid,
         })
         .select('id')
         .single();
 
       if (adErr || !nuevoAnuncio) {
         throw new Error(adErr?.message || 'Error al guardar anuncio');
+      }
+
+      // 3.1 Guardar etiquetas seleccionadas
+      if (selectedTags.length > 0) {
+        const { error: tagsErr } = await supabase.from('anuncio_etiquetas').insert(
+          selectedTags.map((etiquetaId) => ({
+            anuncio_id: nuevoAnuncio.id,
+            etiqueta_id: etiquetaId,
+          }))
+        );
+
+        if (tagsErr) {
+          throw new Error(tagsErr.message || 'Error al guardar las etiquetas del anuncio');
+        }
       }
 
       // 4. Si es plan de pago -> Redirigir a Pasarela Yape/Plin
@@ -279,11 +429,79 @@ export default function PublicarPage() {
                 type="tel"
                 placeholder="Ej. 987654321"
                 value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
+                onChange={(e) => {
+                  setTelefono(e.target.value);
+                  setPerfilId('');
+                  setOtpEnviado(false);
+                  setOtpInput('');
+                  setOtpDebugCode('');
+                  setTelefonoVerificado(false);
+                }}
                 required
                 className="w-full bg-dark-900 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-brand-500"
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-dark-900/60 p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-white flex items-center gap-2">
+                  <ShieldCheck className={`w-4 h-4 ${telefonoVerificado ? 'text-emerald-400' : 'text-zinc-400'}`} />
+                  Verificación de WhatsApp
+                </p>
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  {telefonoVerificado
+                    ? 'Número verificado. Ya puedes publicar tu anuncio.'
+                    : 'Recibe un código de 6 dígitos y verifícalo antes de publicar.'}
+                </p>
+              </div>
+
+              {telefonoVerificado ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+                  <Check className="w-4 h-4" />
+                  Verificado
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleEnviarOtp}
+                  disabled={otpEnviando || !telefono.trim()}
+                  className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold transition-all"
+                >
+                  {otpEnviando ? 'Enviando...' : otpEnviado ? 'Reenviar código' : 'Enviar código'}
+                </button>
+              )}
+            </div>
+
+            {otpEnviado && !telefonoVerificado && (
+              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Código de 6 dígitos"
+                  className="flex-1 bg-dark-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm tracking-[0.3em] text-white placeholder-zinc-500 placeholder:tracking-normal focus:outline-none focus:border-brand-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleVerificarOtp}
+                  disabled={otpVerificando || otpInput.length !== 6}
+                  className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-bold transition-all"
+                >
+                  {otpVerificando ? 'Verificando...' : 'Verificar'}
+                </button>
+              </div>
+            )}
+
+            {otpDebugCode && !telefonoVerificado && (
+              <p className="mt-3 text-[11px] text-amber-400 font-semibold">
+                Modo desarrollo sin Evolution API. Código:{' '}
+                <span className="font-mono tracking-widest">{otpDebugCode}</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -421,16 +639,16 @@ export default function PublicarPage() {
               </label>
               <div className="flex flex-wrap gap-2">
                 {allTags.map((tag) => {
-                  const isSel = selectedTags.includes(tag.nombre);
+                  const isSel = selectedTags.includes(tag.id);
                   return (
                     <button
                       type="button"
                       key={tag.id}
                       onClick={() => {
                         if (isSel) {
-                          setSelectedTags(selectedTags.filter((t) => t !== tag.nombre));
+                          setSelectedTags(selectedTags.filter((t) => t !== tag.id));
                         } else {
-                          setSelectedTags([...selectedTags, tag.nombre]);
+                          setSelectedTags([...selectedTags, tag.id]);
                         }
                       }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${isSel
@@ -522,7 +740,13 @@ export default function PublicarPage() {
               return (
                 <div
                   key={plan.id}
-                  onClick={() => setSelectedPlanId(plan.id)}
+                  onClick={() => {
+                    setSelectedPlanId(plan.id);
+                    setErrorMsg('');
+                    router.replace(`/publicar?plan=${encodeURIComponent(plan.id)}`, {
+                      scroll: false,
+                    });
+                  }}
                   className={`cursor-pointer rounded-xl p-4 border transition-all ${isSelected
                     ? 'border-brand-500 bg-brand-500/10 shadow-lg shadow-brand-500/20'
                     : 'border-white/10 bg-dark-900/60 hover:border-white/20'

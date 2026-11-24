@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, PlusCircle, Search, ShieldCheck, Menu, X, Sparkles } from 'lucide-react';
+import { Flame, PlusCircle, Search, ShieldCheck, Menu, X, Sparkles, LayoutDashboard } from 'lucide-react';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -43,6 +43,23 @@ export default function Navbar() {
               className="text-zinc-300 hover:text-brand-500 transition-colors"
             >
               Planes & Tarifas
+            </Link>
+            <Link
+              href="/favoritos"
+              className={`transition-colors hover:text-brand-500 ${
+                pathname === '/favoritos' ? 'text-brand-500 font-semibold' : 'text-zinc-300'
+              }`}
+            >
+              Favoritos
+            </Link>
+            <Link
+              href="/ofertante"
+              className={`flex items-center gap-1.5 transition-colors hover:text-brand-500 ${
+                pathname.startsWith('/ofertante') ? 'text-brand-500 font-semibold' : 'text-zinc-300'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              Mi panel
             </Link>
             <Link
               href="/admin"
@@ -92,6 +109,14 @@ export default function Navbar() {
               className="px-3 py-2 rounded-lg text-zinc-200 hover:bg-white/5 font-medium"
             >
               Planes & Tarifas
+            </Link>
+            <Link
+              href="/ofertante"
+              onClick={() => setMobileMenuOpen(false)}
+              className="px-3 py-2 rounded-lg text-brand-400 hover:bg-white/5 font-medium flex items-center gap-2"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              Mi panel
             </Link>
             <Link
               href="/admin"

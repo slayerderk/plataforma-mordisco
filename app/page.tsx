@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, MapPin, Globe, Sparkles, Filter, ChevronRight, CheckCircle2, Flame, Layers } from 'lucide-react';
+import { Search, MapPin, Globe, Sparkles, Filter, ChevronRight, CheckCircle2, Layers } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import AdCard from '@/components/AdCard';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, getPlanBeneficios } from '@/lib/utils';
 
 export default function HomePage() {
   const supabase = createClient();
@@ -41,9 +41,11 @@ export default function HomePage() {
           .select(`
             *,
             distrito:distritos(name),
-            usuario:perfiles(telefono_verificado)
+            usuario:perfiles(telefono_verificado),
+            anuncio_etiquetas(etiqueta_id, etiquetas(nombre))
           `)
           .eq('activo', true)
+          .or(`vigente_hasta.is.null,vigente_hasta.gte.${new Date().toISOString()}`)
           .order('es_vip', { ascending: false })
           .order('ultima_republicacion', { ascending: false }),
       ]);
@@ -112,7 +114,13 @@ export default function HomePage() {
       return false;
     }
 
-    // 3. Palabra clave
+    // 3. Etiqueta seleccionada
+    if (selectedEtiqueta) {
+      const etiquetasAd = (ad.anuncio_etiquetas || []).map((rel: any) => rel.etiqueta_id);
+      if (!etiquetasAd.includes(selectedEtiqueta)) return false;
+    }
+
+    // 4. Palabra clave
     if (searchTerm.trim()) {
       const matchText = (ad.titulo + ' ' + ad.descripcion).toLowerCase();
       if (!matchText.includes(searchTerm.toLowerCase())) return false;
@@ -245,10 +253,10 @@ export default function HomePage() {
                   <button
                     key={etq.id}
                     onClick={() =>
-                      setSelectedEtiqueta(selectedEtiqueta === etq.nombre ? null : etq.nombre)
+                      setSelectedEtiqueta(selectedEtiqueta === etq.id ? null : etq.id)
                     }
                     className={`px-2.5 py-1 rounded-full text-xs transition-all ${
-                      selectedEtiqueta === etq.nombre
+                      selectedEtiqueta === etq.id
                         ? 'bg-brand-600 text-white font-bold'
                         : 'bg-white/5 hover:bg-white/10 text-zinc-300'
                     }`}
@@ -319,7 +327,10 @@ export default function HomePage() {
                 fotos={ad.fotos || []}
                 es_vip={ad.es_vip}
                 total_likes={ad.total_likes}
-                telefono_verificado={ad.usuario?.telefono_verificado ?? true}
+                telefono_verificado={ad.usuario?.telefono_verificado ?? false}
+                etiquetas={(ad.anuncio_etiquetas || []).flatMap((rel: any) =>
+                  rel.etiquetas?.nombre ? [rel.etiquetas.nombre] : []
+                )}
                 created_at={ad.created_at}
               />
             ))}
@@ -371,18 +382,17 @@ export default function HomePage() {
 
                 {/* Benefits List */}
                 <ul className="space-y-2.5 text-xs text-zinc-300 mb-6">
-                  {Array.isArray(plan.caracteristicas) &&
-                    plan.caracteristicas.map((item: string, i: number) => (
-                      <li key={i} className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
+                  {getPlanBeneficios(plan).map((item, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
                 </ul>
               </div>
 
               <Link
-                href="/publicar"
+                href={`/publicar?plan=${encodeURIComponent(plan.id)}`}
                 className={`w-full py-3 rounded-xl font-bold text-xs text-center transition-all ${
                   plan.es_destacado
                     ? 'bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-600/30'

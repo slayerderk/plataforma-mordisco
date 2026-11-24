@@ -16,8 +16,8 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { requireOfertanteSession } from '@/lib/supabase/ofertante';
 import { formatPrice } from '@/lib/utils';
-import { notificarAdminPorWhatsApp } from '@/lib/whatsapp';
 
 export default function PagoPage() {
   return (
@@ -62,14 +62,29 @@ function PagoContent() {
 
   useEffect(() => {
     async function loadData() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user || user.is_anonymous) {
+        router.replace(`/login?mode=register&next=${encodeURIComponent(`/pago/${anuncioId}`)}`);
+        return;
+      }
+
       // 1. Cargar anuncio
       const { data: adData } = await supabase
         .from('anuncios')
-        .select('id, titulo, plan_id, usuario:perfiles(nombre_comercial, telefono)')
+        .select('id, titulo, plan_id, usuario_id, usuario:perfiles(nombre_comercial, telefono)')
         .eq('id', anuncioId)
         .single();
 
-      if (adData) setAnuncio(adData);
+      if (adData) {
+        if (adData.usuario_id !== user.id) {
+          router.replace('/');
+          return;
+        }
+        setAnuncio(adData);
+      }
 
       // 2. Cargar plan
       const targetPlanId = planParam || adData?.plan_id;
@@ -85,7 +100,9 @@ function PagoContent() {
       // 3. Cargar configuración de pagos (Yape / Plin / QR)
       const { data: configData } = await supabase
         .from('configuracion_admin')
-        .select('*')
+        .select(
+          'id, qr_yape_url, qr_plin_url, telefono_pago, titular_pago, yape_activo, plin_activo, logo_url, peso_max_foto_mb, dias_espera_republicar, updated_at'
+        )
         .eq('id', 1)
         .single();
 
@@ -160,7 +177,11 @@ function PagoContent() {
 
   // Cálculo de Precios
   const precioOriginal = Number(plan?.precio || 0);
-  const montoDescuento = (precioOriginal * descuentoPorcentaje) / 100;
+  const descuentoFijo = Number(cuponAplicado?.monto_fijo_descuento || 0);
+  const montoDescuento =
+    descuentoFijo > 0
+      ? Math.min(precioOriginal, descuentoFijo)
+      : (precioOriginal * descuentoPorcentaje) / 100;
   const precioFinal = Math.max(0, precioOriginal - montoDescuento);
 
   // Validar Cupón
@@ -180,8 +201,26 @@ function PagoContent() {
       return;
     }
 
+    if (cupon.fecha_expiracion && new Date(cupon.fecha_expiracion).getTime() < Date.now()) {
+      setCuponError('Este cupón ya expiró.');
+      return;
+    }
+
+    if (
+      cupon.usos_maximos != null &&
+      Number(cupon.usos_actuales || 0) >= Number(cupon.usos_maximos)
+    ) {
+      setCuponError('Este cupón ya alcanzó su límite de usos.');
+      return;
+    }
+
+    if (!cupon.porcentaje_descuento && !cupon.monto_fijo_descuento) {
+      setCuponError('Este cupón no tiene un descuento válido.');
+      return;
+    }
+
     setCuponAplicado(cupon);
-    setDescuentoPorcentaje(cupon.porcentaje_descuento || 0);
+    setDescuentoPorcentaje(Number(cupon.porcentaje_descuento || 0));
   };
 
   const handleVoucherSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -202,8 +241,10 @@ function PagoContent() {
     setSubmitting(true);
 
     try {
+      const user = await requireOfertanteSession(supabase, router, `/pago/${anuncioId}`);
+
       // 1. Subir voucher a bucket 'comprobantes'
-      const fileName = `${anuncioId}/${Date.now()}-${voucherFile.name}`;
+      const fileName = `${user.id}/${anuncioId}/${Date.now()}-${voucherFile.name}`;
       const { error: uploadErr } = await supabase.storage
         .from('comprobantes')
         .upload(fileName, voucherFile, { upsert: true });
@@ -231,27 +272,17 @@ function PagoContent() {
 
       setPagoRegistrado(nuevoPago);
 
-      // Disparar Notificación Híbrida / Autónoma
-      const resNotif = await notificarAdminPorWhatsApp({
-        anuncioId,
-        tituloAnuncio: anuncio?.titulo || 'Servicio',
-        nombreOfertante: anuncio?.usuario?.nombre_comercial || 'Ofertante',
-        planNombre: plan?.nombre || 'Destacado',
-        monto: precioFinal,
-        tokenAprobacion: nuevoPago.token_aprobacion,
-        comprobanteUrl: urlData.publicUrl,
-        config: {
-          whatsapp_admin: config?.whatsapp_admin || '51935910409',
-          modo_whatsapp: config?.modo_whatsapp || 'hibrido',
-          evolution_api_url: config?.evolution_api_url,
-          evolution_api_key: config?.evolution_api_key,
-        },
+      const notifResponse = await fetch('/api/notificar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pagoId: nuevoPago.id }),
       });
+      const notifData = await notifResponse.json().catch(() => null);
 
-      if (resNotif.success) {
+      if (notifData?.success) {
         setAutoSent(true);
-      } else if (resNotif.fallbackUrl) {
-        setWaNotifUrl(resNotif.fallbackUrl);
+      } else if (notifData?.fallbackUrl) {
+        setWaNotifUrl(notifData.fallbackUrl);
       }
 
       setSubmitting(false);
